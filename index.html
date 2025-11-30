@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -8,7 +7,7 @@
     <!-- Chargement des bibliothèques React via CDN -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Chargement de Babel pour JSX (uniquement pour cette méthode de déploiement simple) -->
+    <!-- Chargement de Babel pour JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Chargement de Tailwind CSS pour le style -->
@@ -60,13 +59,11 @@
     <script type="text/babel">
         // --------------------------------------------------------------------------------------------------
         // CODE REACT INTEGRAL DE L'APPLICATION ASH.IA
-        // NOTE: La persistance Firestore est désactivée dans cette version simplifiée (CDN).
         // --------------------------------------------------------------------------------------------------
         
-        // Simuler les imports (les fonctions Firebase sont maintenant disponibles globalement)
         const { useState, useEffect, useRef } = React;
         
-        // Simuler les icônes Lucide-React avec des Emojis/Symboles
+        // --- SIMULATION D'ICÔNES LUCIDE-REACT ---
         const Icon = ({ name, className, children }) => {
             let IconContent;
             switch(name) {
@@ -90,58 +87,14 @@
             return <span className={`inline-block icon-content ${className}`}>{IconContent}{children}</span>;
         };
         
-        // --- CONFIGURATION DE BASE ---
+        // --- CONFIGURATION DE BASE CRITIQUE API ---
         const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
-        const API_KEY = "AIzaSyCDg-WPAJhx-DKbvhqbVbY2eAGwk6nSSk0";
-        const API_URL = `"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${AIzaSyCDg-WPAJhx-DKbvhqbVbY2eAGwk6nSSk0}`" \
-  -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyCDg-WPAJhx-DKbvhqbVbY2eAGwk6nSSk0' \
-  -X POST \
-  -d '{
-    "contents": [
-      {
-        "parts": [
-          {
-            "text": "Explain how AI works in a few words"
-          }
-        ]
-      }
-    ]
-  -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyAVouNyamcIEL33EVZVH9-9sY3oM8zPA9U' \
-  -X POST \
-  -d '{
-    "contents": [
-      {
-        "parts": [
-          {
-            "text": "Explain how AI works in a few words"
-          }
-        ]
-      }
-    ]
-  }';
-        const MAX_RETRIES = 3;
-
-        // Configuration Firebase (non utilisée pour la persistance dans cette version CDN, mais nécessaire pour le code)
-        // Les fonctions Firebase sont ignorées si les CDN ne sont pas là ou si la configuration est vide.
-        const appId = 'ashia-standalone';
-        const firebaseConfig = { /* Laisser vide pour désactiver l'intégration Firestore/Auth */ };
         
-        // Simuler l'initialisation de Firebase (pour éviter un plantage)
-        let firebaseApp = null;
-        let authService = null;
-        let firestoreDb = null;
-        try {
-            // Vérifier si firebase est défini (si les CDN ont chargé)
-            if (typeof firebase !== 'undefined' && firebase.initializeApp) {
-                 firebaseApp = firebase.initializeApp(firebaseConfig);
-                 // Si on n'utilise pas getAuth/getFirestore pour une configuration sans clé, on ne peut pas les initialiser
-            }
-        } catch (e) {
-             console.warn("Firebase non initialisé. La persistance n'est pas supportée dans cette version CDN simple.");
-        }
-
+        // CLÉ API MISE À JOUR : CLÉ COMPLÈTE
+        const API_KEY = "AIzaSyCDg-WPAJhx-DKbvhqbVbY2eAGwk6nSSk0"; 
+        
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 3;
 
         // Helper to format source links
         const formatSource = (source) => {
@@ -198,6 +151,7 @@
                 resetConfirm: "Réinitialiser le pseudo et le profil ?",
                 nicknameRequired: "Veuillez entrer un pseudo.",
                 deleteChat: "Supprimer le Chat",
+                keyError: (length) => `ERREUR API: La clé API est trop courte ou invalide. Longueur actuelle: ${length}. Une clé complète est nécessaire.`,
             },
             en: {
                 nicknamePlaceholder: "Your Nickname (Ex: UserX)",
@@ -244,6 +198,7 @@
                 resetConfirm: "Reset nickname and profile?",
                 nicknameRequired: "Please enter a nickname.",
                 deleteChat: "Delete Chat",
+                keyError: (length) => `API ERROR: The API key is too short or invalid. Current length: ${length}. A complete key is required.`,
             }
         };
 
@@ -273,12 +228,11 @@
             const [chats, setChats] = useState([]); 
             const [chatType, setChatType] = useState('ephemeral'); // Forcer en éphémère
 
-            // States for title editing
+            // States for title editing (non-fonctionnel sans persistance, mais gardé)
             const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
             const [chatToEdit, setChatToEdit] = useState(null);
 
-            // Firebase States
-            // Les états Firebase sont maintenus pour la structure, mais les fonctions sont désactivées.
+            // Firebase States (simplifiés/désactivés)
             const [db, setDb] = useState(null);
             const [userId, setUserId] = useState(null);
             const [isAuthReady, setIsAuthReady] = useState(false);
@@ -291,18 +245,6 @@
 
             const CustomStyles = () => (
                 <style>{`
-                    /* Custom scrollbar pour une meilleure visibilité */
-                    .custom-scrollbar::-webkit-scrollbar {
-                        width: 8px;
-                    }
-                    .custom-scrollbar::-webkit-scrollbar-track {
-                        background: #1f2937;
-                    }
-                    .custom-scrollbar::-webkit-scrollbar-thumb {
-                        background: #4f46e5;
-                        border-radius: 4px;
-                    }
-
                     /* Ombre de texte pour la nuance de couleur des caractères (plus joli) */
                     .neon-text-shadow {
                          /* Subtile ombre blanche/indigo pour l'effet 'néon' léger */
@@ -375,7 +317,7 @@
 
             // 1. INITIALISATION DE BASE (LOCAL STORAGE & AUTH ID)
             useEffect(() => {
-                // Initialisation de l'ID utilisateur anonyme (sans Firebase)
+                // Initialisation de l'ID utilisateur anonyme et marquage de l'état prêt
                 setUserId(crypto.randomUUID());
                 setIsAuthReady(true);
                 setChatType('ephemeral'); 
@@ -421,7 +363,7 @@
             const startNewProjectChat = () => newChat('standard');
             const startNewEphemeralChat = () => newChat('ephemeral'); 
 
-            // Les fonctions suivantes sont des stubs et n'effectuent aucune opération Firestore
+            // Les fonctions de persistance sont des stubs et n'effectuent aucune opération Firestore
             const loadChat = async (chat) => { console.log("Fonction de chargement non disponible."); };
             const deleteChat = async (id) => { console.log("Fonction de suppression non disponible."); };
             const updateChatTitle = async (newTitle) => { console.log("Fonction de renommage non disponible."); }
@@ -444,6 +386,14 @@
             const callGeminiApi = async (messages, userPrompt, attempt = 1) => {
                  const systemPrompt = getSystemInstruction(userType); 
                 
+                 if (API_KEY.length < 40) {
+                     console.error("Clé API manquante ou invalide. Longueur: ", API_KEY.length);
+                     return { 
+                         text: t.keyError(API_KEY.length), 
+                         sources: [] 
+                     };
+                 }
+
                  const chatHistory = messages.map(msg => ({
                      role: msg.role === 'user' ? 'user' : 'model', 
                      parts: [{ text: msg.text }]
@@ -617,14 +567,15 @@
                                  {!tempNickname.trim() && <p className="text-red-400 text-xs mt-2">{t.nicknameRequired}</p>}
                              </div>
                             
-                             <p className="mt-4 mb-6 text-sm text-center text-gray-400">
+                             {/* CORRECTION: Remplacement de <p> par <div> pour éviter l'erreur de validation DOM */}
+                             <div className="mt-4 mb-6 text-sm text-center text-gray-400">
                                  {isAuthReady ? t.authStatus : (
                                      <div className="flex items-center justify-center text-yellow-500">
                                          <Icon name="Loader" className="w-3 h-3 mr-1 animate-spin" />
                                          {t.authLoading}
                                      </div>
                                  )}
-                             </p>
+                             </div>
 
                              <button
                                  onClick={handleSaveNickname}
@@ -649,13 +600,13 @@
                  return (
                      <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${getThemeClasses('bg-main')} bg-opacity-95`}>
                          <div className={`w-full max-w-md p-6 rounded-xl shadow-2xl ${getThemeClasses('bg-modal')}`}>
-                             <div className="flex justify-between items-center mb-6 border-b pb-4 border-gray-700">
+                             <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-700">
                                  <h2 className={`text-2xl font-bold ${getThemeClasses('text-primary')}`}>
                                      <Icon name="Settings" className="inline w-6 h-6 mr-2 icon-content" /> {translations[language].settingsTitle}
                                  </h2>
                                   <button 
                                      onClick={handleCloseSettings} 
-                                     className={`p-1 rounded-full ${getThemeClasses('btn-secondary')}`}
+                                     className={`p-1 rounded-full transition duration-150 ${getThemeClasses('btn-secondary')}`}
                                      title={translations[language].close}
                                  >
                                      <Icon name="X" className="w-6 h-6 icon-content" />
@@ -778,7 +729,7 @@
 
                  const handleUpdate = (e) => {
                      e.preventDefault();
-                     console.log("Renommage non disponible sans Firebase configuré.");
+                     console.log("Renommage non disponible sans persistance.");
                      setIsTitleEditModalOpen(false);
                  };
 
@@ -1082,11 +1033,5 @@
         root.render(<App />);
 
     </script>
-    
-    <!-- IMPORTANT: Les CDN Firebase doivent être chargés après le script de l'application -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
 </body>
 </html>
-
