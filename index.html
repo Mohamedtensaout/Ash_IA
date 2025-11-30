@@ -92,8 +92,8 @@
         
         // --- CONFIGURATION DE BASE ---
         const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
-        const API_KEY = "AIzaSyAVouNyamcIEL33EVZVH9-9sY3oM8zPA9U"; 
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${AIzaSyAVouNyamcIEL33EVZVH9-9sY3oM8zPA9U}`;
+        const API_KEY = "AIzaSyAVouNyamcIEL33EVZVH9-9sY3oM8zPA9U";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
   -H 'Content-Type: application/json' \
   -H 'X-goog-api-key: AIzaSyAVouNyamcIEL33EVZVH9-9sY3oM8zPA9U' \
   -X POST \
