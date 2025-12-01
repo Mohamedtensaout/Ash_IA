@@ -64,8 +64,9 @@
         // ==================================================================================================
         // 🛑🛑🛑 ATTENTION CRITIQUE : CLÉ API ET MODÈLE 🛑🛑🛑
         // ==================================================================================================
-        // Le modèle est remis à gemini-2.0-flash comme dans la requête cURL validée par l'utilisateur.
-        const MODEL_NAME = "gemini-2.0-flash";
+        // CORRECTION DE L'ERREUR 404 : Changement de modèle vers une version actuelle et valide.
+        // gemini-2.0-flash n'est plus directement accessible ou son nom a changé.
+        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
         
         // Clé API de l'utilisateur.
         const API_KEY = "AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4"; 
@@ -431,6 +432,13 @@
                              return callGeminiApi(messages, userPrompt, attempt + 1);
                          }
                          
+                         // Erreur 404: Non trouvé (URL incorrecte, nom de modèle incorrect)
+                         if (response.status === 404) {
+                             const errorText = await response.text();
+                             console.error(`API Error 404 (Not Found):`, errorText);
+                             return { text: `ERREUR 404: URL de l'API ou nom du modèle (gemini-2.0-flash) incorrect. Veuillez vérifier le nom du modèle ou l'URL. Tentative avec ${MODEL_NAME}.` , sources: [] };
+                         }
+
                          // Erreur 403: Accès refusé (très probable restriction de clé)
                          if (response.status === 403) {
                              const errorText = await response.text();
