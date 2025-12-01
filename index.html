@@ -4,14 +4,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ash.ia - Assistant IA Persistant</title>
     
-    <!-- Chargement des bibliothèques React via CDN -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Chargement de Babel pour JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Chargement de Firebase SDKs via CDN -->
-    <!-- NOTE: Ces imports sont nécessaires pour que le code React puisse les utiliser -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -24,10 +20,8 @@
         };
     </script>
     
-    <!-- Chargement de Tailwind CSS pour le style -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Configuration Tailwind pour utiliser la police Inter -->
     <script>
         tailwind.config = {
             theme: {
@@ -77,10 +71,8 @@
 <body class="p-0 m-0 overflow-hidden">
 
     <div id="root" class="h-screen w-screen">
-        <!-- L'application React sera injectée ici -->
-    </div>
+        </div>
 
-    <!-- Le code React/JSX doit être inclus dans un script de type 'text/babel' -->
     <script type="text/babel">
         
         // --------------------------------------------------------------------------------------------------
@@ -96,7 +88,7 @@
         const API_KEY = "AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4"; 
         
         // L'URL de l'API est construite avec le modèle spécifié.
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
         const MAX_RETRIES = 3;
         // ==================================================================================================
 
@@ -1044,7 +1036,7 @@
                                      onClick={handleCloseSettings} 
                                      className={`p-1 rounded-full transition duration-150 ${getThemeClasses('btn-secondary')}`}
                                      title={translations[language].close}
-                                 >
+                                  >
                                      <Icon name="X" className="w-6 h-6 icon-content" />
                                   </button>
                              </div>
@@ -1229,7 +1221,7 @@
                          <button
                              onClick={startNewStandardChat} // Utiliser standard pour le projet, mais le nom change
                              className={`flex items-center p-3 rounded-lg text-sm font-semibold hover:opacity-80 transition duration-150 ${getThemeClasses('btn-primary').replace('bg-indigo', 'bg-teal')}`}
-                         >
+                             >
                              <Icon name="Bookmark" className="w-5 h-5 mr-3 text-white icon-content" /> {t.newProject}
                          </button>
                      </div>
@@ -1405,8 +1397,8 @@
                              </div>
                          </header>
 
-                         {/* Zone de messages (DÉMARRE APRÈS L'ENTÊTE) */}
-                         <main className={`flex-1 overflow-y-auto p-4 space-y-8 ${getThemeClasses('bg-main')} custom-scrollbar pt-16`}>
+                         {/* Zone de messages (DÉMARRE APRÈS L'ENTÊTE, MODIFIÉE AVEC pb-20) */}
+                         <main className={`flex-1 overflow-y-auto p-4 space-y-8 ${getThemeClasses('bg-main')} custom-scrollbar pt-16 pb-20`}>
                             
                              {/* Message de bienvenue centré */}
                              {showWelcomeMessage && (
@@ -1505,8 +1497,8 @@
                              )}
                              <div ref={messagesEndRef} />
                              
-                             {/* Mention du créateur en bas à droite (Doit être dans le main pour le défilement) */}
-                             <div className="fixed bottom-14 right-2 p-1 text-xs text-gray-500 pointer-events-none z-10">
+                             {/* CORRECTION: Mention du créateur déplacée à l'intérieur du main pour défiler */}
+                             <div className="p-4 text-center text-xs text-gray-500 pt-8 pb-4">
                                  Créé par le CEO ASH-SHISHANI
                              </div>
                          </main>
@@ -1574,4 +1566,3 @@
     </script>
 </body>
 </html>
-
