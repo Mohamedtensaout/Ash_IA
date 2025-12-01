@@ -101,11 +101,9 @@
         const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
         
         // Clé API de l'utilisateur.
-        const API_KEY = "AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4"; 
-        
-        // L'URL de l'API est construite avec le modèle spécifié.
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
-        const MAX_RETRIES = 3;
+        const API_KEY = "AIzaSyC8Q2J918QZd2TE3QSPR1mT2yxzlOvdHa0";
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+const MAX_RETRIES = 3;
         // ==================================================================================================
 
         const { useState, useEffect, useRef } = React;
