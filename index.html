@@ -2,13 +2,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ash.ia - Assistant IA</title>
+    <title>Ash.ia - Assistant IA Persistant</title>
     
     <!-- Chargement des bibliothèques React via CDN -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <!-- Chargement de Babel pour JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Chargement de Firebase SDKs via CDN -->
+    <!-- NOTE: Ces imports sont nécessaires pour que le code React puisse les utiliser -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, orderBy, limit, getDocs, addDoc, updateDoc, doc, onSnapshot, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Expose Firebase services globally for use in the main script block
+        window.firebase = {
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, collection, query, orderBy, limit, getDocs, addDoc, updateDoc, doc, onSnapshot, deleteDoc, serverTimestamp
+        };
+    </script>
     
     <!-- Chargement de Tailwind CSS pour le style -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -46,6 +60,17 @@
             font-family: 'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif;
             display: inline-block;
         }
+
+        /* Style pour les formules mathématiques (simule l'effet MathJax sans le charger) */
+        .math-block {
+            display: block;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
     </style>
     
 </head>
@@ -57,6 +82,7 @@
 
     <!-- Le code React/JSX doit être inclus dans un script de type 'text/babel' -->
     <script type="text/babel">
+        
         // --------------------------------------------------------------------------------------------------
         // CODE REACT INTEGRAL DE L'APPLICATION ASH.IA
         // --------------------------------------------------------------------------------------------------
@@ -64,8 +90,6 @@
         // ==================================================================================================
         // 🛑🛑🛑 ATTENTION CRITIQUE : CLÉ API ET MODÈLE 🛑🛑🛑
         // ==================================================================================================
-        // CORRECTION DE L'ERREUR 404 : Changement de modèle vers une version actuelle et valide.
-        // gemini-2.0-flash n'est plus directement accessible ou son nom a changé.
         const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
         
         // Clé API de l'utilisateur.
@@ -97,6 +121,9 @@
                 case 'Globe': IconContent = '🌐'; break;
                 case 'Bookmark': IconContent = '🔖'; break;
                 case 'Zap': IconContent = '⚡'; break;
+                case 'Paperclip': IconContent = '📎'; break; 
+                case 'Clipboard': IconContent = '📋'; break; // Nouvelle icône
+                case 'RefreshCw': IconContent = '🔄'; break; // Nouvelle icône
                 default: IconContent = name;
             }
             return <span className={`inline-block icon-content ${className}`}>{IconContent}{children}</span>;
@@ -108,6 +135,32 @@
                 return `[${source.title}](${source.uri})`;
             }
             return '';
+        };
+        
+        // Utility function to convert File to Base64
+        const fileToBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    // Extract only the Base64 data (after the comma)
+                    const base64String = reader.result.split(',')[1];
+                    resolve(base64String);
+                };
+                reader.onerror = error => reject(error);
+            });
+        };
+        
+        // Utility function to copy text (using execCommand for iframe compatibility)
+        const copyToClipboard = (text) => {
+             const el = document.createElement('textarea');
+             el.value = text;
+             document.body.appendChild(el);
+             el.select();
+             document.execCommand('copy');
+             document.body.removeChild(el);
+             // Note: Un feedback visuel (toast ou changement d'icône) serait idéal ici
+             console.log("Copied to clipboard:", text);
         };
 
         // --- TRADUCTIONS DE L'INTERFACE UTILISATEUR ---
@@ -127,10 +180,10 @@
                 authStatus: "Authentification OK",
                 authLoading: "Chargement de l'authentification...",
                 sidebarTitle: "Historique",
-                newChat: "Nouveau Chat",
-                newProject: "Créer un Projet",
-                newEphemeral: "Chat Éphémère (Non Sauvegardé)",
-                noSavedChats: "Aucun chat sauvegardé.",
+                newChat: "Nouveau Chat Standard",
+                newProject: "Nouveau Projet (Sauvegardé)",
+                newEphemeral: "Chat Temporaire",
+                noSavedChats: "Commencez une conversation pour la sauvegarder.",
                 typeStudent: "Étudiant",
                 typeProfessional: "Professionnel",
                 typeGeneral: "Général",
@@ -142,7 +195,7 @@
                 openHistory: "Ouvrir l'historique",
                 settings: "Paramètres",
                 startNewChat: "Démarrer un Nouveau Chat",
-                welcomeMessage: (pseudo) => `Bienvenue ${pseudo}, posez-moi une question !`,
+                welcomeMessage: (pseudo) => `Le fondateur Ash-Shishani vous souhaite la bienvenue ${pseudo}, posez-moi une question !`,
                 profileSelected: (userTypeLabel) => `Votre profil ${userTypeLabel} est sélectionné. Posez votre première question pour démarrer un chat.`,
                 profileGeneral: "Aucun profil sélectionné. Vous êtes en mode Général.",
                 useMenu: "Utilisez le menu pour charger vos conversations.",
@@ -159,9 +212,15 @@
                 nicknameRequired: "Veuillez entrer un pseudo.",
                 deleteChat: "Supprimer le Chat",
                 keyError: (length) => `ERREUR API: La clé API est trop courte ou invalide. Longueur actuelle: ${length}. Une clé complète est nécessaire.`,
+                persistedChat: "Conversations Sauvegardées",
+                chatDeleteConfirm: "Êtes-vous sûr de vouloir supprimer cette conversation ?",
+                imageUpload: "Image prête à être envoyée (cliquez pour annuler)",
+                copyMessage: "Copier le message", // Nouvelle traduction
+                reformulateMessage: "Demander une reformulation", // Nouvelle traduction
             },
             en: {
                 nicknamePlaceholder: "Your Nickname (Ex: UserX)",
+                profileLabel: "Interaction Profile (Optional)",
                 profileLabel: "Interaction Profile (Optional)",
                 student: "Student",
                 professional: "Professional",
@@ -175,10 +234,10 @@
                 authStatus: "Authentication OK",
                 authLoading: "Authentication loading...",
                 sidebarTitle: "History",
-                newChat: "New Chat",
-                newProject: "Create Project",
-                newEphemeral: "Ephemeral Chat (Not Saved)",
-                noSavedChats: "No saved chats.",
+                newChat: "New Standard Chat",
+                newProject: "New Project (Saved)",
+                newEphemeral: "Temporary Chat",
+                noSavedChats: "Start a conversation to save it.",
                 typeStudent: "Student",
                 typeProfessional: "Professional",
                 typeGeneral: "General",
@@ -190,7 +249,7 @@
                 openHistory: "Open History",
                 settings: "Settings",
                 startNewChat: "Start New Chat",
-                welcomeMessage: (pseudo) => `Welcome ${pseudo}, ask me a question!`,
+                welcomeMessage: (pseudo) => `Founder Ash-Shishani welcomes you ${pseudo}, ask me a question!`,
                 profileSelected: (userTypeLabel) => `Your ${userTypeLabel} profile is selected. Ask your first question to start a chat.`,
                 profileGeneral: "No profile selected. You are in General mode.",
                 useMenu: "Use the menu to load your conversations.",
@@ -207,6 +266,11 @@
                 nicknameRequired: "Please enter a nickname.",
                 deleteChat: "Delete Chat",
                 keyError: (length) => `API ERROR: The API key is too short or invalid. Current length: ${length}. A complete key is required.`,
+                persistedChat: "Saved Conversations",
+                chatDeleteConfirm: "Are you sure you want to delete this conversation?",
+                imageUpload: "Image ready to send (click to cancel)",
+                copyMessage: "Copy message",
+                reformulateMessage: "Request reformulation",
             }
         };
 
@@ -233,22 +297,37 @@
             const [input, setInput] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const [currentChatId, setCurrentChatId] = useState(null);
-            const [chats, setChats] = useState([]); 
-            const [chatType, setChatType] = useState('ephemeral'); // Forcer en éphémère
+            const [chats, setChats] = useState([]); // Liste des chats pour la sidebar
+            const [chatType, setChatType] = useState('standard'); // 'standard' or 'ephemeral'
 
-            // States for title editing (non-fonctionnel sans persistance, mais gardé)
+            // States for title editing
             const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
             const [chatToEdit, setChatToEdit] = useState(null);
+            
+            // File Upload States & Ref
+            const fileInputRef = useRef(null);
+            const [uploadedImage, setUploadedImage] = useState(null); // { base64: '...', mimeType: 'image/png' }
 
-            // Firebase States (simplifiés/désactivés)
+
+            // Firebase States
             const [db, setDb] = useState(null);
+            const [auth, setAuth] = useState(null);
             const [userId, setUserId] = useState(null);
             const [isAuthReady, setIsAuthReady] = useState(false);
             
             const messagesEndRef = useRef(null);
             
             const isTyping = input.length > 0;
+            
+            // --- CONSTANTES FIREBASE ---
+            const CHAT_COLLECTION = 'chats'; 
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
+            // --- FONCTIONS UTILS FIREBASE ---
+            const getChatCollectionRef = (dbInstance, currentUserId) => {
+                return window.firebase.collection(dbInstance, `artifacts/${appId}/users/${currentUserId}/${CHAT_COLLECTION}`);
+            };
+            
             // --- LOGIQUE DE THÈME ET STYLES ---
 
             const CustomStyles = () => (
@@ -323,13 +402,8 @@
             };
 
 
-            // 1. INITIALISATION DE BASE (LOCAL STORAGE & AUTH ID)
+            // 1. INITIALISATION FIREBASE & LOCAL STORAGE
             useEffect(() => {
-                // Initialisation de l'ID utilisateur anonyme et marquage de l'état prêt
-                setUserId(crypto.randomUUID());
-                setIsAuthReady(true);
-                setChatType('ephemeral'); 
-                
                 // Récupération des préférences locales
                 const storedNickname = localStorage.getItem('ashia_nickname');
                 const storedLanguage = localStorage.getItem('ashia_lang');
@@ -347,6 +421,47 @@
                 if (storedTheme) setTheme(storedTheme);
                 if (storedUserType) setUserType(storedUserType);
                 
+                // --- Initialisation Firebase ---
+                if (typeof window.firebase === 'undefined') {
+                    console.error("Firebase SDK not loaded.");
+                    return;
+                }
+                
+                try {
+                    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                    const app = window.firebase.initializeApp(firebaseConfig);
+                    const dbInstance = window.firebase.getFirestore(app);
+                    const authInstance = window.firebase.getAuth(app);
+                    
+                    setDb(dbInstance);
+                    setAuth(authInstance);
+
+                    // Authentification
+                    window.firebase.onAuthStateChanged(authInstance, async (user) => {
+                        if (user) {
+                            setUserId(user.uid);
+                            setIsAuthReady(true);
+                            console.log("Firebase Auth Ready. User ID:", user.uid);
+                        } else {
+                            // Si l'utilisateur n'est pas authentifié, se connecter.
+                            try {
+                                if (typeof __initial_auth_token !== 'undefined') {
+                                    await window.firebase.signInWithCustomToken(authInstance, __initial_auth_token);
+                                } else {
+                                    await window.firebase.signInAnonymously(authInstance);
+                                }
+                                // La fonction onAuthStateChanged se déclenchera à nouveau avec l'utilisateur
+                            } catch (e) {
+                                console.error("Firebase Sign-In Error:", e);
+                                setIsAuthReady(true); // Marquer comme prêt même en cas d'erreur
+                            }
+                        }
+                    });
+
+                } catch (e) {
+                    console.error("Firebase Initialization Failed:", e);
+                    setIsAuthReady(true);
+                }
 
             }, []);
 
@@ -355,32 +470,173 @@
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }, [messages]);
 
+            // 3. ÉCOUTE EN TEMPS RÉEL DES CONVERSATIONS (onSnapshot)
+            useEffect(() => {
+                 if (!db || !userId) return;
 
-            // --- CHAT MANAGEMENT FUNCTIONS (Désactivées) ---
+                 const q = window.firebase.query(
+                     getChatCollectionRef(db, userId),
+                     window.firebase.orderBy('lastUpdated', 'desc'),
+                     window.firebase.limit(50)
+                 );
 
+                 // Attache le listener en temps réel
+                 const unsubscribe = window.firebase.onSnapshot(q, (snapshot) => {
+                     const fetchedChats = snapshot.docs.map(doc => ({
+                         id: doc.id,
+                         ...doc.data(),
+                         // Convertir le timestamp si nécessaire
+                         lastUpdated: doc.data().lastUpdated?.toDate ? doc.data().lastUpdated.toDate() : doc.data().lastUpdated,
+                         createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : doc.data().createdAt,
+                     }));
+                     
+                     setChats(fetchedChats);
+                     console.log(`Fetched ${fetchedChats.length} chats.`);
+
+                     // Si c'est la première fois qu'on charge et qu'il y a des chats, charger le plus récent.
+                     if (currentChatId === null && fetchedChats.length > 0) {
+                          // Charger le chat le plus récent
+                          loadChat(fetchedChats[0]);
+                          console.log("Auto-loaded latest chat.");
+                     }
+                 }, (error) => {
+                     console.error("Firestore snapshot error:", error);
+                 });
+
+                 // Détache le listener lorsque le composant est démonté ou que les dépendances changent
+                 return () => unsubscribe();
+            }, [db, userId]); // Dépend de db et userId
+
+
+            // --- FILE HANDLERS ---
+            
+            const handleFileSelect = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                // Simple validation pour ne prendre que les images (Gemini supporte majoritairement les images en Base64)
+                if (!file.type.startsWith('image/')) {
+                    console.error("Seules les images sont supportées pour l'upload (via Base64).");
+                    // Nettoyer l'input pour permettre le re-upload
+                    fileInputRef.current.value = null; 
+                    return;
+                }
+                
+                try {
+                    const base64 = await fileToBase64(file);
+                    setUploadedImage({ 
+                        base64: base64, 
+                        mimeType: file.type, 
+                        name: file.name 
+                    });
+                    
+                    // Nettoyer l'input pour pouvoir sélectionner le même fichier à nouveau si l'utilisateur annule et recommence
+                    fileInputRef.current.value = null; 
+                    
+                } catch (error) {
+                    console.error("Erreur lors de la conversion en Base64:", error);
+                }
+            };
+
+            const removeUploadedImage = () => {
+                setUploadedImage(null);
+            };
+
+            // --- CHAT MANAGEMENT FUNCTIONS (avec persistance) ---
+            
+            // Revenir à un état de chat vide (non sauvegardé tant qu'il n'y a pas de message)
             const newChat = (type = 'standard') => {
                 setMessages([]);
                 setCurrentChatId(null);
-                setChatType('ephemeral'); 
+                setChatType(type); 
                 setIsMenuOpen(false); 
                 setIsNewChatMenuOpen(false);
                 setInput('');
+                setUploadedImage(null); // IMPORTANT: Vider l'image en cours
             };
             
             const startNewStandardChat = () => newChat('standard'); 
-            const startNewProjectChat = () => newChat('standard');
             const startNewEphemeralChat = () => newChat('ephemeral'); 
 
-            // Les fonctions de persistance sont des stubs et n'effectuent aucune opération Firestore
-            const loadChat = async (chat) => { console.log("Fonction de chargement non disponible."); };
-            const deleteChat = async (id) => { console.log("Fonction de suppression non disponible."); };
-            const updateChatTitle = async (newTitle) => { console.log("Fonction de renommage non disponible."); }
-            const saveChat = async (currentMessages) => { /* Ne fait rien */ };
-            
+            // Sauvegarde ou mise à jour de la conversation
+            const saveChat = async (currentMessages, chatId = currentChatId) => {
+                if (!db || !userId || chatType === 'ephemeral' || currentMessages.length === 0) return;
+
+                try {
+                    const chatData = {
+                        messages: currentMessages,
+                        lastUpdated: window.firebase.serverTimestamp(),
+                        preview: currentMessages[0].text.substring(0, 100),
+                        role: userType || 'general'
+                    };
+
+                    if (chatId) {
+                        // Mise à jour du document existant
+                        const chatRef = window.firebase.doc(getChatCollectionRef(db, userId), chatId);
+                        await window.firebase.updateDoc(chatRef, chatData);
+                    } else {
+                        // Création d'un nouveau document pour le premier message
+                        const userFirstText = currentMessages[0].text || currentMessages[0].parts.find(p => p.text)?.text || 'Nouveau Chat';
+                        const newDocRef = await window.firebase.addDoc(getChatCollectionRef(db, userId), {
+                            ...chatData,
+                            createdAt: window.firebase.serverTimestamp(),
+                            // Le titre est la première phrase de l'utilisateur
+                            title: userFirstText.substring(0, 30) + (userFirstText.length > 30 ? '...' : ''),
+                        });
+                        setCurrentChatId(newDocRef.id);
+                        console.log("Nouveau chat créé et sauvegardé:", newDocRef.id);
+                    }
+                } catch (error) {
+                    console.error("Erreur lors de la sauvegarde du chat:", error);
+                }
+            };
+
+            const loadChat = (chat) => {
+                // S'assurer que les messages sont correctement désérialisés (Firestore stocke les tableaux)
+                setMessages(chat.messages || []);
+                setCurrentChatId(chat.id);
+                setChatType('standard');
+                setIsMenuOpen(false); // Fermer la sidebar
+                setUploadedImage(null); // Vider l'image au chargement d'un nouveau chat
+                console.log("Chat chargé:", chat.id);
+            };
+
+            const deleteChat = async (id) => {
+                 if (!db || !userId || !window.confirm(t.chatDeleteConfirm)) return;
+                 try {
+                     const chatRef = window.firebase.doc(getChatCollectionRef(db, userId), id);
+                     await window.firebase.deleteDoc(chatRef);
+                     
+                     // Si c'est le chat actif, démarrer un nouveau chat
+                     if (currentChatId === id) {
+                         newChat('standard');
+                     }
+                     
+                     console.log("Chat deleted:", id);
+                 } catch (error) {
+                     console.error("Error deleting chat:", error);
+                 }
+            };
+
+            const updateChatTitle = async (id, newTitle) => {
+                 if (!db || !userId) return;
+                 try {
+                     const chatRef = window.firebase.doc(getChatCollectionRef(db, userId), id);
+                     await window.firebase.updateDoc(chatRef, { title: newTitle });
+                     console.log("Chat title updated:", id);
+                 } catch (error) {
+                     console.error("Error updating chat title:", error);
+                 } finally {
+                     setIsTitleEditModalOpen(false);
+                     setChatToEdit(null);
+                 }
+            }
+
+
             const getSystemInstruction = (type) => {
                  const langCode = language === 'fr' ? 'français' : 'english';
-                 // Instruction CLÉ: Pas de Markdown. Réponse brève.
-                 const baseInstruction = `You are Ash.ia, a helpful AI assistant. Respond in ${langCode}. Your responses MUST be EXTREMELY BRIEF, direct, and contain NO Markdown formatting (no bold, italic, lists, emojis, etc. – ONLY plain text in paragraphs, no *, **, #, or any formatting). ALWAYS end every response with one relevant follow-up question.`;
+                 // INSTRUCTION MODIFIÉE: Supprime l'autorisation du gras Markdown (**texte**)
+                 const baseInstruction = `You are Ash.ia, a helpful AI assistant. Respond in ${langCode}. Your responses MUST be EXTREMELY BRIEF and direct. Use the LaTeX syntax ($$...$$ for block, $...$ for inline) for all mathematical formulas and scientific notation, like $\sum_{i=1}^{n} i^2$. DO NOT use any other Markdown (bolding, lists, titles, blockquotes, code blocks). ALWAYS end every response with one relevant follow-up question.`;
 
                  if (type === 'student') {
                      return `${baseInstruction} Act as an academic tutor. Focus on essential and pedagogical information.`;
@@ -391,9 +647,8 @@
                  return `${baseInstruction} Act as a general knowledgeable assistant.`; 
             };
 
-            const callGeminiApi = async (messages, userPrompt, attempt = 1) => {
+            const callGeminiApi = async (messages, userPrompt, imagePart = null, attempt = 1) => {
                  // ** VALIDER SI LA CLÉ EST VALIDE AVANT L'APPEL **
-                 // Note: Une clé API valide a généralement 39 caractères pour ce format (AIzaSy...)
                  const VALID_KEY_LENGTH = 39;
                  if (API_KEY.length < VALID_KEY_LENGTH) {
                      console.error(t.keyError(API_KEY.length));
@@ -402,9 +657,10 @@
 
                  const systemPrompt = getSystemInstruction(userType); 
                 
-                 const chatHistory = messages.map(msg => ({
+                 // Préparation de l'historique pour l'API
+                 let chatHistory = messages.map(msg => ({
                      role: msg.role === 'user' ? 'user' : 'model', 
-                     parts: [{ text: msg.text }]
+                     parts: msg.parts // Utiliser msg.parts pour les messages utilisateur avec image
                  }));
 
                  const payload = {
@@ -428,17 +684,9 @@
                          if (response.status === 429 && attempt < MAX_RETRIES) {
                              const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
                              await new Promise(resolve => setTimeout(resolve, delay));
-                             console.log(`Tentative ${attempt} échouée (429). Nouvelle tentative dans ${delay.toFixed(0)}ms...`);
-                             return callGeminiApi(messages, userPrompt, attempt + 1);
+                             return callGeminiApi(messages, userPrompt, imagePart, attempt + 1);
                          }
                          
-                         // Erreur 404: Non trouvé (URL incorrecte, nom de modèle incorrect)
-                         if (response.status === 404) {
-                             const errorText = await response.text();
-                             console.error(`API Error 404 (Not Found):`, errorText);
-                             return { text: `ERREUR 404: URL de l'API ou nom du modèle (gemini-2.0-flash) incorrect. Veuillez vérifier le nom du modèle ou l'URL. Tentative avec ${MODEL_NAME}.` , sources: [] };
-                         }
-
                          // Erreur 403: Accès refusé (très probable restriction de clé)
                          if (response.status === 403) {
                              const errorText = await response.text();
@@ -446,10 +694,8 @@
                              return { text: t.apiRestrictionError, sources: [] };
                          }
 
-                         // Autres erreurs HTTP
                          const errorText = await response.text();
-                         console.error(`API Error ${response.status}:`, errorText);
-                         throw new Error(`Erreur HTTP: ${response.status}`);
+                         throw new Error(`Erreur HTTP: ${response.status} - ${errorText}`);
                      }
 
                      const result = await response.json();
@@ -472,7 +718,6 @@
                          return { text, sources };
 
                      } else {
-                         // Gérer les cas où la réponse est vide (peut être dû à des filtres de sécurité)
                          return { text: t.apiError, sources: [] };
                      }
 
@@ -481,19 +726,61 @@
                      if (attempt < MAX_RETRIES) {
                          const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
                          await new Promise(resolve => setTimeout(resolve, delay));
-                         return callGeminiApi(messages, userPrompt, attempt + 1);
+                         return callGeminiApi(messages, userPrompt, imagePart, attempt + 1);
                      }
                      return { text: t.apiConnectionError, sources: [] };
                  }
             };
 
+            const handleReformulate = async (originalMessage) => {
+                if (isLoading) return;
+
+                // Trouver le dernier message utilisateur pour re-envoyer le contexte
+                const lastUserMessage = messages.slice().reverse().find(msg => msg.role === 'user');
+                if (!lastUserMessage) {
+                    console.error("No previous user message to reformulate.");
+                    // Ajouter un message d'erreur à l'utilisateur
+                    setMessages([...messages, { role: 'assistant', text: "Je ne peux reformuler que la réponse à votre dernière question. Veuillez d'abord poser une question.", parts: [{ text: "Je ne peux reformuler que la réponse à votre dernière question. Veuillez d'abord poser une question." }] }]);
+                    return;
+                }
+
+                // Le prompt d'instruction pour la reformulation
+                const reformulationPrompt = `Reformulez le dernier message de l'assistant, en changeant son ton ou sa structure, basé sur la requête précédente de l'utilisateur. Le message original était: "${originalMessage.text}".`;
+                
+                // On prépare le message utilisateur pour l'API qui inclut la demande de reformulation
+                const reformulationMessage = { role: 'user', parts: [{ text: reformulationPrompt }], text: reformulationPrompt };
+
+                // L'historique pour l'API sera: Historique normal + le message de reformulation
+                const newMessages = [...messages, reformulationMessage];
+                setMessages(newMessages); // Ajoute la demande de reformulation à l'historique visible
+
+                setIsLoading(true);
+
+                try {
+                    // On fait l'appel en se basant sur le contexte précédent
+                    const { text, sources } = await callGeminiApi(newMessages, reformulationPrompt); 
+
+                    // On ajoute la nouvelle réponse au chat
+                    const updatedMessages = [...newMessages, { role: 'assistant', parts: [{ text }], text, sources }];
+                    setMessages(updatedMessages);
+                    await saveChat(updatedMessages); // Sauvegarde automatique
+
+                } catch (error) {
+                    console.error("Erreur lors de la reformulation:", error);
+                    const errorMessages = [...newMessages, { role: 'assistant', text: t.criticalError, parts: [{ text: t.criticalError }] }];
+                    setMessages(errorMessages);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+
             const sendMessage = async (e) => {
                  e.preventDefault();
-                 if (!input.trim() || isLoading) {
+                 if (!input.trim() && !uploadedImage || isLoading) {
                      return;
                  }
                  
-                 // Vérification initiale de la clé pour éviter l'appel si elle est factice
                  const VALID_KEY_LENGTH = 39;
                  if (API_KEY.length < VALID_KEY_LENGTH) {
                      setMessages([...messages, { role: 'assistant', text: t.keyError(API_KEY.length) }]);
@@ -501,24 +788,40 @@
                  }
 
 
-                 const userMessage = input.trim();
+                 const userMessageText = input.trim() || uploadedImage?.name || 'Image envoyée';
                  setInput('');
                 
-                 const newMessages = [...messages, { role: 'user', text: userMessage }];
+                 // Construction des parties du message utilisateur
+                 let userParts = [];
+                 if (uploadedImage) {
+                     userParts.push({ 
+                         inlineData: {
+                             mimeType: uploadedImage.mimeType,
+                             data: uploadedImage.base64
+                         } 
+                     });
+                 }
+                 if (userMessageText) {
+                     userParts.push({ text: userMessageText });
+                 }
+                 
+                 const userMessage = { role: 'user', parts: userParts, text: userMessageText };
+                 const newMessages = [...messages, userMessage];
                  setMessages(newMessages);
+                 setUploadedImage(null); // IMPORTANT: Vider l'image après l'avoir ajoutée aux messages
                  setIsLoading(true);
 
                  try {
-                     const { text, sources } = await callGeminiApi(newMessages, userMessage); 
+                     const { text, sources } = await callGeminiApi(newMessages, userMessageText, uploadedImage); 
 
-                     const updatedMessages = [...newMessages, { role: 'assistant', text, sources }];
+                     const updatedMessages = [...newMessages, { role: 'assistant', parts: [{ text }], text, sources }];
                      setMessages(updatedMessages);
                     
-                     await saveChat(updatedMessages); // Désactivé
+                     await saveChat(updatedMessages); // Sauvegarde automatique
 
                  } catch (error) {
                      console.error("Erreur principale de l'application:", error);
-                     const errorMessages = [...newMessages, { role: 'assistant', text: t.criticalError }];
+                     const errorMessages = [...newMessages, { role: 'assistant', text: t.criticalError, parts: [{ text: t.criticalError }] }];
                      setMessages(errorMessages);
                  } finally {
                      setIsLoading(false);
@@ -532,13 +835,14 @@
                      setUserType(null);
                      setMessages([]);
                      setCurrentChatId(null);
-                     setChatType('ephemeral'); 
+                     setChatType('standard'); 
                      setIsSettingsModalOpen(false); 
                      setIsNicknameModalOpen(true); 
                      localStorage.removeItem('ashia_nickname'); 
                      localStorage.removeItem('ashia_lang');
                      localStorage.removeItem('ashia_theme');
                      localStorage.removeItem('ashia_usertype');
+                     // Note: Les données Firestore ne sont pas effacées ici pour des raisons de sécurité
                  }
             };
             
@@ -565,7 +869,99 @@
                  }
             };
             
-            // --- RENDER MODALS ---
+            // --- RENDER UTILITIES ---
+            
+            // Composant pour afficher les messages de l'assistant avec le formatage Markdown/LaTeX
+            const FormattedMessageText = ({ text }) => {
+                 if (!text) return null;
+
+                 // Remplacement des sauts de ligne pour les paragraphes
+                 let content = text.split('\n').map((line, lineIndex) => {
+                     // 1. Remplacement des formules de bloc $$...$$ par un div
+                     let parts = line.split(/(\$\$[\s\S]*?\$\$)/g).map((part, partIndex) => {
+                         if (part.startsWith('$$') && part.endsWith('$$')) {
+                             const mathContent = part.substring(2, part.length - 2).trim();
+                             // Rendu brut du code LaTeX pour que l'utilisateur puisse le copier/coller dans un outil
+                             return <div key={`${lineIndex}-m-${partIndex}`} className="math-block">{mathContent}</div>;
+                         }
+                         
+                         // 2. Remplacement des formules en ligne $...$
+                         let subParts = part.split(/(\$[\s\S]*?\$)/g).map((subPart, subPartIndex) => {
+                              if (subPart.startsWith('$') && subPart.endsWith('$') && subPart.length > 1) {
+                                  const inlineMathContent = subPart.substring(1, subPart.length - 1).trim();
+                                  // Rendu brut du code LaTeX en ligne
+                                  return <span key={`${lineIndex}-i-${subPartIndex}`} className="font-mono text-sm mx-0.5 whitespace-pre-wrap">{inlineMathContent}</span>;
+                              }
+                              
+                              // Note: Suppression du remplacement du gras ici car l'IA ne doit plus l'utiliser
+                              return subPart;
+                         });
+
+                         return <React.Fragment key={`${lineIndex}-p-${partIndex}`}>{subParts}</React.Fragment>;
+                     });
+
+                     // S'assurer qu'un saut de ligne simple donne un petit espace
+                     return (
+                         <p key={lineIndex} className={line.trim() === '' ? 'mt-1' : 'mt-2 first:mt-0 whitespace-pre-wrap'}>
+                             {parts}
+                         </p>
+                     );
+                 });
+                
+                 return <>{content}</>;
+            };
+            
+            // Composant pour afficher une image envoyée dans le chat
+            const ImagePartRenderer = ({ parts }) => {
+                const imagePart = parts.find(p => p.inlineData && p.inlineData.mimeType.startsWith('image/'));
+                if (!imagePart) return null;
+                
+                const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+
+                return (
+                    <div className="mb-2 max-w-full rounded-lg overflow-hidden shadow-lg border border-gray-700">
+                        <img 
+                            src={imageUrl} 
+                            alt="Image envoyée par l'utilisateur" 
+                            className="w-full h-auto object-cover max-h-48" 
+                            loading="lazy"
+                        />
+                    </div>
+                );
+            };
+
+            // Composant de prévisualisation de l'image dans le footer
+            const ImagePreview = () => {
+                 if (!uploadedImage) return null;
+                 const imageUrl = `data:${uploadedImage.mimeType};base64,${uploadedImage.base64}`;
+
+                 return (
+                     <div 
+                         className={`absolute -top-32 left-0 right-0 p-3 flex items-center justify-between rounded-t-xl shadow-2xl ${getThemeClasses('bg-chat-card')} border-t border-indigo-700/50 cursor-pointer`}
+                         onClick={removeUploadedImage}
+                         title={t.imageUpload}
+                     >
+                         <div className="flex items-center space-x-3">
+                             <img 
+                                 src={imageUrl} 
+                                 alt="Preview" 
+                                 className="w-16 h-16 object-cover rounded-lg border-2 border-indigo-500"
+                             />
+                             <p className="text-sm font-semibold truncate max-w-[200px]">{t.imageUpload} ({uploadedImage.name || 'Image'})</p>
+                         </div>
+                         <button 
+                             type="button" 
+                             onClick={(e) => { e.stopPropagation(); removeUploadedImage(); }}
+                             className={`p-1 rounded-full ${getThemeClasses('btn-secondary')} hover:bg-red-500/50`}
+                             title={t.cancel}
+                         >
+                             <Icon name="X" className="w-5 h-5 text-red-400 icon-content" />
+                         </button>
+                     </div>
+                 );
+            };
+
+            // --- RENDER MODALS (non modifiés) ---
 
             const NicknameModal = () => {
                  const [tempNickname, setTempNickname] = useState(''); 
@@ -769,8 +1165,11 @@
 
                  const handleUpdate = (e) => {
                      e.preventDefault();
-                     console.log("Renommage non disponible sans persistance.");
-                     setIsTitleEditModalOpen(false);
+                     if (newTitle.trim()) {
+                         updateChatTitle(chatToEdit.id, newTitle.trim());
+                     } else {
+                         // Gérer l'erreur si le titre est vide
+                     }
                  };
 
                  return (
@@ -791,7 +1190,10 @@
                              <div className="flex justify-end space-x-3">
                                  <button
                                      type="button"
-                                     onClick={() => setIsTitleEditModalOpen(false)}
+                                     onClick={() => {
+                                         setIsTitleEditModalOpen(false);
+                                         setChatToEdit(null); // IMPORTANT: Réinitialiser
+                                     }}
                                      className={`p-2 px-4 rounded-lg font-semibold ${getThemeClasses('btn-secondary')}`}
                                  >
                                      {t.cancel}
@@ -807,7 +1209,8 @@
                      </div>
                  );
             };
-            
+
+
             const NewChatMenu = () => {
                  return (
                      <div className={`absolute top-14 right-0 z-30 w-56 p-2 rounded-xl shadow-2xl ${getThemeClasses('bg-modal')} flex flex-col space-y-2 border border-gray-700`}>
@@ -819,20 +1222,32 @@
                          </button>
                          <button
                              onClick={startNewStandardChat}
-                             className={`flex items-center p-3 rounded-lg text-sm font-semibold hover:opacity-80 transition duration-150 ${getThemeClasses('btn-secondary')}`}
+                             className={`flex items-center p-3 rounded-lg text-sm font-semibold hover:opacity-80 transition duration-150 ${getThemeClasses('btn-primary')}`}
                          >
                              <Icon name="PlusCircle" className="w-5 h-5 mr-3 text-white icon-content" /> {t.newChat}
                          </button>
                          <button
-                             onClick={startNewProjectChat}
+                             onClick={startNewStandardChat} // Utiliser standard pour le projet, mais le nom change
                              className={`flex items-center p-3 rounded-lg text-sm font-semibold hover:opacity-80 transition duration-150 ${getThemeClasses('btn-primary').replace('bg-indigo', 'bg-teal')}`}
-                             title="Non-fonctionnel sans persistance"
                          >
                              <Icon name="Bookmark" className="w-5 h-5 mr-3 text-white icon-content" /> {t.newProject}
                          </button>
                      </div>
                  );
             };
+
+            // Bouton d'attachement de fichier (Maintenance levée)
+            const AttachmentButton = () => (
+                 <button
+                     type="button"
+                     onClick={() => fileInputRef.current?.click()}
+                     className={`p-3 rounded-full transition duration-150 shadow-md ${getThemeClasses('btn-secondary')} flex-shrink-0`}
+                     title="Attacher une image ou un fichier"
+                     disabled={isLoading || !isAuthReady}
+                 >
+                     <Icon name="Paperclip" className="w-6 h-6 icon-content" />
+                 </button>
+            );
 
 
             // --- RENDER SIDEBAR & CHAT SCREEN ---
@@ -861,48 +1276,78 @@
                              </button>
                          </div>
                         
-                         {/* Message d'avertissement de non-sauvegarde */}
-                         <div className="p-3 mb-4 bg-yellow-900/50 border border-yellow-700 rounded-lg text-sm text-yellow-300">
-                             ⚠️ L'historique n'est pas sauvegardé dans cette version de démonstration.
-                         </div>
-
                          {/* Nouveaux boutons de chat - En haut de la sidebar */}
                          <div className="flex flex-col space-y-2 mb-6">
                              <button
-                                 onClick={startNewProjectChat}
+                                 onClick={startNewStandardChat}
                                  className={`flex items-center justify-center p-3 font-bold rounded-xl transition duration-200 ${getThemeClasses('btn-primary')}`}
                              >
-                                 <Icon name="Bookmark" className="w-5 h-5 mr-2 icon-content" /> {t.newProject}
-                             </button>
-                             <button
-                                 onClick={startNewEphemeralChat}
-                                 className={`flex items-center justify-center p-3 font-bold rounded-xl transition duration-200 bg-gray-600 hover:bg-gray-500 text-white`}
-                             >
-                                 <Icon name="Zap" className="w-5 h-5 mr-2 icon-content" /> {t.newEphemeral}
+                                 <Icon name="PlusCircle" className="w-5 h-5 mr-2 icon-content" /> {t.newChat}
                              </button>
                          </div>
 
+                         <h3 className="text-sm font-semibold text-gray-400 mb-3 border-b border-gray-700 pb-1">{t.persistedChat}</h3>
 
                          <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
-                             <p className="text-gray-400 text-center mt-6">{t.noSavedChats}</p>
+                             {chats.length > 0 ? chats.map((chat) => (
+                                 <div 
+                                     key={chat.id} 
+                                     className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition duration-150 
+                                         ${currentChatId === chat.id ? getThemeClasses('bg-user') : getThemeClasses('bg-chat-card')} 
+                                         hover:opacity-80`}
+                                     onClick={() => loadChat(chat)}
+                                 >
+                                     <div className="flex flex-col overflow-hidden">
+                                         <span className="font-semibold truncate text-sm">{chat.title}</span>
+                                         <span className="text-xs text-gray-400 truncate mt-0.5">{chat.preview}</span>
+                                     </div>
+                                     <div className="flex space-x-2 flex-shrink-0">
+                                          <button 
+                                             onClick={(e) => { 
+                                                 e.stopPropagation(); 
+                                                 setChatToEdit(chat); 
+                                                 setIsTitleEditModalOpen(true); 
+                                             }}
+                                             className={`p-1 rounded-full hover:bg-gray-600/50 transition`}
+                                             title={t.renameChatTitle}
+                                         >
+                                             <Icon name="Edit2" className="w-4 h-4 text-gray-400 icon-content" />
+                                          </button>
+                                          <button 
+                                             onClick={(e) => { 
+                                                 e.stopPropagation(); 
+                                                 deleteChat(chat.id); 
+                                             }}
+                                             className={`p-1 rounded-full hover:bg-red-500/50 transition`}
+                                             title={t.deleteChat}
+                                         >
+                                             <Icon name="Trash2" className="w-4 h-4 text-red-400 icon-content" />
+                                          </button>
+                                     </div>
+                                 </div>
+                             )) : (
+                                <p className="text-gray-400 text-center mt-6">{t.noSavedChats}</p>
+                             )}
                          </div>
+                        
+                         {/* Affichage de l'ID utilisateur pour le débogage/partage */}
+                         {userId && (
+                             <div className={`mt-4 pt-2 border-t border-gray-700 text-xs text-gray-500 break-words`}>
+                                 <p className='font-semibold'>ID Utilisateur :</p>
+                                 <p className='mt-1'>{userId}</p>
+                             </div>
+                         )}
                      </div>
                  );
             };
 
             const renderChatScreen = () => {
-                 const showWelcomeMessage = messages.length === 0 && !isTyping;
+                 const showWelcomeMessage = messages.length === 0 && !isLoading;
                 
-                 const chatTypeIndicator = chatType === 'ephemeral' ? (
-                     <span className="text-sm text-red-400 font-semibold flex items-center">
-                         <Icon name="Zap" className="w-4 h-4 mr-1 icon-content" /> {t.newEphemeral}
-                     </span>
+                 const chatTypeIndicator = currentChatId ? (
+                     <span className="text-sm text-gray-400 truncate max-w-[200px]">{chats.find(c => c.id === currentChatId)?.title || t.newChat}</span>
                  ) : (
-                     currentChatId ? (
-                          <span className="text-sm text-gray-400 truncate max-w-[200px]">{chats.find(c => c.id === currentChatId)?.title}</span>
-                     ) : (
-                         <span className="text-sm text-gray-400">{t.newChat}</span>
-                     )
+                      <span className="text-sm text-gray-400">{chatType === 'ephemeral' ? t.newEphemeral : t.newChat}</span>
                  );
 
                  return (
@@ -912,7 +1357,7 @@
                          {isNicknameModalOpen && <NicknameModal />}
                          {isSettingsModalOpen && <SettingsModal />}
                          {isTitleEditModalOpen && <EditTitleModal />}
-
+                         
                          {/* Overlay pour fermer le menu */}
                          {isMenuOpen && (
                              <div className="fixed inset-0 z-10 bg-black/50" onClick={() => setIsMenuOpen(false)}></div>
@@ -921,8 +1366,8 @@
                              <div className="fixed inset-0 z-20" onClick={() => setIsNewChatMenuOpen(false)}></div>
                          )}
                         
-                         {/* Entête du chat */}
-                         <header className={`flex items-center justify-between p-4 ${getThemeClasses('bg-header')} flex-shrink-0`}>
+                         {/* Entête du chat (FIXE EN HAUT) */}
+                         <header className={`fixed top-0 left-0 right-0 z-30 flex items-center justify-between p-4 ${getThemeClasses('bg-header')} flex-shrink-0`}>
                             
                              <div className="flex items-center space-x-3">
                                  <button
@@ -960,12 +1405,12 @@
                              </div>
                          </header>
 
-                         {/* Zone de messages */}
-                         <main className={`flex-1 overflow-y-auto p-4 space-y-4 ${getThemeClasses('bg-main')} custom-scrollbar`}>
+                         {/* Zone de messages (DÉMARRE APRÈS L'ENTÊTE) */}
+                         <main className={`flex-1 overflow-y-auto p-4 space-y-8 ${getThemeClasses('bg-main')} custom-scrollbar pt-16`}>
                             
                              {/* Message de bienvenue centré */}
                              {showWelcomeMessage && (
-                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 pointer-events-none">
+                                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 pointer-events-none" style={{ top: '64px', bottom: '64px' }}>
                                      <p className="text-xl font-semibold text-center text-gray-400 transition-opacity duration-300"
                                          style={{ opacity: showWelcomeMessage ? 1 : 0 }}
                                      >
@@ -990,12 +1435,16 @@
 
                              {messages.map((msg, index) => (
                                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                     <div className={`max-w-[85%] p-3 rounded-xl ${
+                                     <div className={`max-w-[85%] p-3 rounded-xl relative ${ // Ajout de 'relative' pour positionner les boutons
                                          msg.role === 'user' 
                                          ? getThemeClasses('bg-user') + ' rounded-br-none'
                                          : getThemeClasses('bg-ash') + ' rounded-tl-none'
                                      }`}>
-                                         <p className="whitespace-pre-wrap">{msg.text}</p>
+                                         {/* Affichage de l'image si présente dans le message utilisateur */}
+                                         {msg.role === 'user' && msg.parts && <ImagePartRenderer parts={msg.parts} />}
+                                        
+                                         {/* Affichage du texte formaté */}
+                                         <FormattedMessageText text={msg.text} />
                                         
                                          {/* Affichage des sources pour l'assistant */}
                                          {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
@@ -1018,6 +1467,29 @@
                                                  </ul>
                                              </div>
                                          )}
+                                         
+                                         {/* ACTION BUTTONS (Assistants only, bottom right) */}
+                                         {msg.role === 'assistant' && (
+                                              <div className="absolute bottom-[-10px] right-0 flex space-x-1">
+                                                  {/* Bouton Copier */}
+                                                  <button
+                                                      onClick={() => copyToClipboard(msg.text)}
+                                                      className={`p-1 text-xs rounded-full ${getThemeClasses('bg-ash')} text-gray-400 hover:text-white hover:bg-indigo-600 transition duration-150 shadow-md border border-gray-700`}
+                                                      title={t.copyMessage}
+                                                  >
+                                                      <Icon name="Clipboard" className="w-3 h-3 icon-content" />
+                                                  </button>
+                                                  {/* Bouton Reformuler */}
+                                                  <button
+                                                      onClick={() => handleReformulate(msg)}
+                                                      className={`p-1 text-xs rounded-full ${getThemeClasses('bg-ash')} text-gray-400 hover:text-white hover:bg-yellow-600 transition duration-150 shadow-md border border-gray-700`}
+                                                      title={t.reformulateMessage}
+                                                      disabled={isLoading}
+                                                  >
+                                                      <Icon name="RefreshCw" className="w-3 h-3 icon-content" />
+                                                  </button>
+                                              </div>
+                                         )}
                                      </div>
                                  </div>
                              ))}
@@ -1032,27 +1504,48 @@
                                  </div>
                              )}
                              <div ref={messagesEndRef} />
+                             
+                             {/* Mention du créateur en bas à droite (Doit être dans le main pour le défilement) */}
+                             <div className="fixed bottom-14 right-2 p-1 text-xs text-gray-500 pointer-events-none z-10">
+                                 Créé par le CEO ASH-SHISHANI
+                             </div>
                          </main>
 
-                         {/* Formulaire de saisie */}
-                         <footer className={`p-3 ${getThemeClasses('bg-header')} flex-shrink-0`}>
-                             <form onSubmit={sendMessage} className="flex items-center">
+                         {/* Formulaire de saisie (FIXE EN BAS) */}
+                         <footer className={`fixed bottom-0 left-0 right-0 p-3 ${getThemeClasses('bg-header')} flex-shrink-0 z-30`}>
+                             
+                             {/* Prévisualisation de l'image (position absolue) */}
+                             <ImagePreview />
+
+                             <form onSubmit={sendMessage} className="flex items-center space-x-3">
+                                 {/* Champ d'upload de fichier masqué */}
+                                 <input
+                                     type="file"
+                                     ref={fileInputRef}
+                                     onChange={handleFileSelect}
+                                     accept="image/*"
+                                     className="hidden"
+                                 />
+
+                                 {/* Bouton d'attachement (déclenche le click sur l'input masqué) */}
+                                 <AttachmentButton />
+                                 
                                  <input
                                      type="text"
                                      value={input}
                                      onChange={(e) => setInput(e.target.value)}
                                      placeholder={t.sendPlaceholder}
-                                     className={`flex-1 p-3 mr-3 rounded-full outline-none transition duration-150 placeholder-gray-400 ${getThemeClasses('bg-input')}`}
-                                     disabled={isLoading}
+                                     className={`flex-1 p-3 rounded-full outline-none transition duration-150 placeholder-gray-400 ${getThemeClasses('bg-input')}`}
+                                     disabled={isLoading || !isAuthReady}
                                  />
                                  <button
                                      type="submit"
-                                     className={`p-3 rounded-full transition duration-150 shadow-xl ${getThemeClasses('btn-primary')} ${
-                                         !input.trim() || isLoading
+                                     className={`p-3 rounded-full transition duration-150 shadow-xl ${getThemeClasses('btn-primary')} flex-shrink-0 ${
+                                         (!input.trim() && !uploadedImage) || isLoading || !isAuthReady
                                          ? 'opacity-50 cursor-not-allowed'
                                          : 'transform active:scale-95'
                                      }`}
-                                     disabled={!input.trim() || isLoading}
+                                     disabled={(!input.trim() && !uploadedImage) || isLoading || !isAuthReady}
                                  >
                                      <Icon name="Send" className="w-6 h-6 icon-content" />
                                  </button>
