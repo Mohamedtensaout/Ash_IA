@@ -93,9 +93,23 @@
         // CLÉ API: VEUILLEZ REMPLACER CETTE CHAÎNE PAR VOTRE CLÉ API COMPLÈTE
         // Note: L'ancienne clé était trop courte (39 chars) et causait une erreur personnalisée. 
         // Cette clé placeholder a 51 caractères pour passer la vérification de longueur.
-        const API_KEY = "AIzaSyCDg-WPAJhx-DKbvhqbVbY2eAGwk6nSSk0"; 
+        const API_KEY = "AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4"; 
         
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;" \
+  -H 'Content-Type: application/json' \
+  -H 'X-goog-api-key: AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4' \
+  -X POST \
+  -d '{
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "Explain how AI works in a few words"
+          }
+        ]
+      }
+    ]
+  }
         const MAX_RETRIES = 3;
 
         // Helper to format source links
