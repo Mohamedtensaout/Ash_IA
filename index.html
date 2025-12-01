@@ -61,6 +61,20 @@
         // CODE REACT INTEGRAL DE L'APPLICATION ASH.IA
         // --------------------------------------------------------------------------------------------------
         
+        // ==================================================================================================
+        // 🛑🛑🛑 ATTENTION CRITIQUE : CLÉ API ET MODÈLE 🛑🛑🛑
+        // ==================================================================================================
+        // Le modèle est remis à gemini-2.0-flash comme dans la requête cURL validée par l'utilisateur.
+        const MODEL_NAME = "gemini-2.0-flash";
+        
+        // Clé API de l'utilisateur.
+        const API_KEY = "AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4"; 
+        
+        // L'URL de l'API est construite avec le modèle spécifié.
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 3;
+        // ==================================================================================================
+
         const { useState, useEffect, useRef } = React;
         
         // --- SIMULATION D'ICÔNES LUCIDE-REACT ---
@@ -87,31 +101,6 @@
             return <span className={`inline-block icon-content ${className}`}>{IconContent}{children}</span>;
         };
         
-        // --- CONFIGURATION DE BASE CRITIQUE API ---
-        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
-        
-        // CLÉ API: VEUILLEZ REMPLACER CETTE CHAÎNE PAR VOTRE CLÉ API COMPLÈTE
-        // Note: L'ancienne clé était trop courte (39 chars) et causait une erreur personnalisée. 
-        // Cette clé placeholder a 51 caractères pour passer la vérification de longueur.
-        const API_KEY = "AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4"; 
-        
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
-  -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyCz1Pl84NaoLXz5_xFWFtz11NYk7P5dGg4' \
-  -X POST \
-  -d '{
-    "contents": [
-      {
-        "parts": [
-          {
-            "text": "Explain how AI works in a few words"
-          }
-        ]
-      }
-    ]
-  }
-        const MAX_RETRIES = 3;
-
         // Helper to format source links
         const formatSource = (source) => {
             if (source.uri && source.title) {
@@ -162,6 +151,7 @@
                 criticalError: "Une erreur critique est survenue.",
                 apiError: "Ash.ia a rencontré une difficulté pour générer une réponse. Que désirez-vous savoir d'autre ?",
                 apiConnectionError: "Ash.ia n'a pas pu se connecter pour le moment. Veuillez réessayer. Quel sujet voulez-vous aborder ?",
+                apiRestrictionError: "ERREUR 403 (Accès Refusé): L'API a bloqué l'accès. Votre clé est valide (confirmé par cURL), mais elle a **très probablement une restriction de référant HTTP (HTTP referrer) qui bloque l'accès depuis ce site web.** Veuillez retirer toute restriction sur votre clé API dans la console Google.",
                 language: "Langue de l'Interface",
                 resetSettings: "Réinitialiser le Profil & Pseudo",
                 resetConfirm: "Réinitialiser le pseudo et le profil ?",
@@ -209,6 +199,7 @@
                 criticalError: "A critical error occurred.",
                 apiError: "Ash.ia encountered a difficulty generating a response. What else would you like to know?",
                 apiConnectionError: "Ash.ia could not connect at this time. Please try again. What topic do you want to discuss?",
+                apiRestrictionError: "ERROR 403 (Forbidden Access): The API blocked access. Your key is valid (confirmed by cURL), but it **most likely has an HTTP referrer restriction that blocks access from this website.** Please remove any restrictions on your API key in the Google console.",
                 language: "Interface Language",
                 resetSettings: "Reset Profile & Nickname",
                 resetConfirm: "Reset nickname and profile?",
@@ -400,12 +391,16 @@
             };
 
             const callGeminiApi = async (messages, userPrompt, attempt = 1) => {
+                 // ** VALIDER SI LA CLÉ EST VALIDE AVANT L'APPEL **
+                 // Note: Une clé API valide a généralement 39 caractères pour ce format (AIzaSy...)
+                 const VALID_KEY_LENGTH = 39;
+                 if (API_KEY.length < VALID_KEY_LENGTH) {
+                     console.error(t.keyError(API_KEY.length));
+                     return { text: t.keyError(API_KEY.length), sources: [] };
+                 }
+
                  const systemPrompt = getSystemInstruction(userType); 
                 
-                 // NOTE: La vérification de longueur de clé API a été supprimée pour éviter le message d'erreur
-                 // personnalisé suite à une clé placeholder trop courte. L'échec se fera maintenant 
-                 // via la connexion API standard si la clé n'est pas remplacée par une clé complète et valide.
-
                  const chatHistory = messages.map(msg => ({
                      role: msg.role === 'user' ? 'user' : 'model', 
                      parts: [{ text: msg.text }]
@@ -416,6 +411,9 @@
                      tools: [{ "google_search": {} }],
                      systemInstruction: { parts: [{ text: systemPrompt }] },
                  };
+                
+                 // AJOUT DE DÉBOGAGE
+                 console.log("Tentative d'appel à l'API Gemini...", { attempt, model: MODEL_NAME, url: API_URL });
 
                  try {
                      const response = await fetch(API_URL, {
@@ -425,11 +423,24 @@
                      });
 
                      if (!response.ok) {
+                         // Erreur 429: Trop de requêtes
                          if (response.status === 429 && attempt < MAX_RETRIES) {
                              const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
                              await new Promise(resolve => setTimeout(resolve, delay));
+                             console.log(`Tentative ${attempt} échouée (429). Nouvelle tentative dans ${delay.toFixed(0)}ms...`);
                              return callGeminiApi(messages, userPrompt, attempt + 1);
                          }
+                         
+                         // Erreur 403: Accès refusé (très probable restriction de clé)
+                         if (response.status === 403) {
+                             const errorText = await response.text();
+                             console.error(`API Error 403 (Forbidden):`, errorText);
+                             return { text: t.apiRestrictionError, sources: [] };
+                         }
+
+                         // Autres erreurs HTTP
+                         const errorText = await response.text();
+                         console.error(`API Error ${response.status}:`, errorText);
                          throw new Error(`Erreur HTTP: ${response.status}`);
                      }
 
@@ -449,10 +460,11 @@
                                  }))
                                  .filter(source => source.uri && source.title);
                          }
-
+                         console.log("API Success.");
                          return { text, sources };
 
                      } else {
+                         // Gérer les cas où la réponse est vide (peut être dû à des filtres de sécurité)
                          return { text: t.apiError, sources: [] };
                      }
 
@@ -472,6 +484,14 @@
                  if (!input.trim() || isLoading) {
                      return;
                  }
+                 
+                 // Vérification initiale de la clé pour éviter l'appel si elle est factice
+                 const VALID_KEY_LENGTH = 39;
+                 if (API_KEY.length < VALID_KEY_LENGTH) {
+                     setMessages([...messages, { role: 'assistant', text: t.keyError(API_KEY.length) }]);
+                     return;
+                 }
+
 
                  const userMessage = input.trim();
                  setInput('');
@@ -579,8 +599,7 @@
                                  {!tempNickname.trim() && <p className="text-red-400 text-xs mt-2">{t.nicknameRequired}</p>}
                              </div>
                             
-                             {/* CORRECTION DE L'ERREUR DE VALIDATION DOM (<div> dans <p>) : 
-                                 Remplacement de <p> par <div> pour le statut d'authentification */}
+                             {/* Statut d'authentification */}
                              <div className="mt-4 mb-6 text-sm text-center text-gray-400">
                                  {isAuthReady ? t.authStatus : (
                                      <div className="flex items-center justify-center text-yellow-500">
@@ -799,6 +818,7 @@
                          <button
                              onClick={startNewProjectChat}
                              className={`flex items-center p-3 rounded-lg text-sm font-semibold hover:opacity-80 transition duration-150 ${getThemeClasses('btn-primary').replace('bg-indigo', 'bg-teal')}`}
+                             title="Non-fonctionnel sans persistance"
                          >
                              <Icon name="Bookmark" className="w-5 h-5 mr-3 text-white icon-content" /> {t.newProject}
                          </button>
@@ -952,6 +972,11 @@
                                              {t.profileGeneral}
                                          </p>
                                      )}
+                                     {API_KEY.length < 39 && (
+                                         <p className="text-sm mt-4 text-red-500 font-bold">
+                                             🚨 {t.keyError(API_KEY.length)} 🚨
+                                         </p>
+                                     )}
                                  </div>
                              )}
 
@@ -1048,3 +1073,4 @@
     </script>
 </body>
 </html>
+
