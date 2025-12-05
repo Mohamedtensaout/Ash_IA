@@ -21,6 +21,19 @@
     </script>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+async function ask(prompt) {
+  const r = await fetch('/api/gemini', {
+    method: 'POST',  // <-- corrigé ici
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+
+  const data = await r.json();
+  console.log(data);
+}
+</script>
+
     
     <script>
         tailwind.config = {
